@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { catalogQuerySchema, createCatalogSchema } from '../../lib/contracts/catalog';
 import { checkRateLimit } from '../../lib/security/rate-limit';
-import { createCatalog, listCatalogs } from '../../lib/server/catalog-store';
+import { prisma } from '../../lib/server/prisma';
 
 const defaultOwnerId = 'demo-owner';
 
@@ -21,7 +22,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'INVALID_QUERY', issues: parsed.error.issues }, { status: 400 });
   }
 
-  const records = await listCatalogs(parsed.data.ownerId, parsed.data.status);
+  const records = await prisma.catalog.findMany({
+    where: {
+      userId: parsed.data.ownerId,
+      status: parsed.data.status,
+    },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      publication: true,
+      _count: {
+        select: {
+          items: true,
+          assets: true,
+        },
+      },
+    },
+  });
   return NextResponse.json({ data: records });
 }
 
@@ -39,27 +55,65 @@ export async function POST(request: Request) {
 
   try {
     const ownerId = request.headers.get('x-user-id') ?? defaultOwnerId;
-    const record = await createCatalog(ownerId, parsed.data);
+    if (parsed.data.bookshelfId) {
+      const bookshelf = await prisma.bookshelf.findUnique({
+        where: { id: parsed.data.bookshelfId },
+        select: { userId: true },
+      });
+
+      if (!bookshelf) {
+        return NextResponse.json({ error: 'BOOKSHELF_NOT_FOUND' }, { status: 404 });
+      }
+
+      if (bookshelf.userId !== ownerId) {
+        return NextResponse.json({ error: 'BOOKSHELF_FORBIDDEN' }, { status: 403 });
+      }
+    }
+
+    const record = await prisma.catalog.create({
+      data: {
+        userId: ownerId,
+        title: parsed.data.title,
+        slug: parsed.data.slug,
+        description: parsed.data.description,
+        sourcePdfUrl: parsed.data.sourcePdfUrl,
+        bookshelfId: parsed.data.bookshelfId,
+        items: parsed.data.items.length
+          ? {
+              create: parsed.data.items.map((item, index) => ({
+                position: index,
+                type: item.type,
+                name: item.name,
+                description: item.description,
+                price: item.price,
+                currency: item.currency,
+                imageUrl: item.imageUrl,
+                metadata: item.metadata,
+              })),
+            }
+          : undefined,
+      },
+      include: {
+        items: true,
+        publication: true,
+      },
+    });
+
     return NextResponse.json({ data: record }, { status: 201 });
   } catch (error) {
-    const code = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        const target = Array.isArray(error.meta?.target) ? error.meta.target : [];
+        if (target.includes('userId') && target.includes('slug')) {
+          return NextResponse.json({ error: 'CATALOG_SLUG_CONFLICT' }, { status: 409 });
+        }
+      }
 
-    if (code === 'CATALOG_SLUG_CONFLICT') {
-      return NextResponse.json({ error: code }, { status: 409 });
+      if (error.code === 'P2003') {
+        return NextResponse.json({ error: 'INVALID_RELATION' }, { status: 400 });
+      }
     }
 
-    if (code === 'BOOKSHELF_NOT_FOUND') {
-      return NextResponse.json({ error: code }, { status: 404 });
-    }
-
-    if (code === 'BOOKSHELF_FORBIDDEN') {
-      return NextResponse.json({ error: code }, { status: 403 });
-    }
-
-    if (code === 'INVALID_RELATION') {
-      return NextResponse.json({ error: code }, { status: 400 });
-    }
-
-    return NextResponse.json({ error: code }, { status: 500 });
+    return NextResponse.json({ error: 'UNKNOWN_ERROR' }, { status: 500 });
   }
 }
