@@ -2,9 +2,8 @@ import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { catalogQuerySchema, createCatalogSchema } from '../../lib/contracts/catalog';
 import { checkRateLimit } from '../../lib/security/rate-limit';
+import { AuthError, requireAuthenticatedUserId } from '../../lib/server/auth';
 import { prisma } from '../../lib/server/prisma';
-
-const defaultOwnerId = 'demo-owner';
 
 export async function GET(request: Request) {
   const limiter = checkRateLimit('catalogs:get', { limit: 120, windowMs: 60_000 });
@@ -22,9 +21,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'INVALID_QUERY', issues: parsed.error.issues }, { status: 400 });
   }
 
+  let ownerId: string;
+  try {
+    ownerId = await requireAuthenticatedUserId(request);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
+    if (code === 'UNAUTHORIZED') {
+      return NextResponse.json({ error: code }, { status: 401 });
+    }
+    return NextResponse.json({ error: 'UNKNOWN_ERROR' }, { status: 500 });
+  }
+
+  if (parsed.data.ownerId && parsed.data.ownerId !== ownerId) {
+    return NextResponse.json({ error: 'FORBIDDEN_OWNER' }, { status: 403 });
+  }
+
   const records = await prisma.catalog.findMany({
     where: {
-      userId: parsed.data.ownerId,
+      userId: ownerId,
       status: parsed.data.status,
     },
     orderBy: { createdAt: 'desc' },
@@ -54,7 +68,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const ownerId = request.headers.get('x-user-id') ?? defaultOwnerId;
+    const ownerId = await requireAuthenticatedUserId(request);
     if (parsed.data.bookshelfId) {
       const bookshelf = await prisma.bookshelf.findUnique({
         where: { id: parsed.data.bookshelfId },
@@ -101,6 +115,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ data: record }, { status: 201 });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.code }, { status: 401 });
+    }
+
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
         const target = Array.isArray(error.meta?.target) ? error.meta.target : [];

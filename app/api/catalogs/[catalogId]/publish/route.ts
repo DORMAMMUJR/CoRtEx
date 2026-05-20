@@ -3,9 +3,8 @@ import { randomBytes, scryptSync } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { publishCatalogSchema } from '../../../../lib/contracts/catalog';
 import { checkRateLimit } from '../../../../lib/security/rate-limit';
+import { AuthError, requireAuthenticatedUserId } from '../../../../lib/server/auth';
 import { prisma } from '../../../../lib/server/prisma';
-
-const defaultOwnerId = 'demo-owner';
 
 type PublishRouteContext = {
   params: {
@@ -36,7 +35,7 @@ export async function POST(request: Request, context: PublishRouteContext) {
   }
 
   try {
-    const ownerId = request.headers.get('x-user-id') ?? defaultOwnerId;
+    const ownerId = await requireAuthenticatedUserId(request);
     const catalog = await prisma.catalog.findUnique({
       where: { id: parsed.data.catalogId },
       select: { id: true, userId: true },
@@ -89,6 +88,10 @@ export async function POST(request: Request, context: PublishRouteContext) {
 
     return NextResponse.json({ data });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.code }, { status: 401 });
+    }
+
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
         const target = Array.isArray(error.meta?.target) ? error.meta.target : [];

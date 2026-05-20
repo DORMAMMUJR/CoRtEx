@@ -9,6 +9,27 @@ function hashSessionToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function getCookieValue(cookieHeader: string, cookieName: string) {
+  const cookieParts = cookieHeader.split(';');
+  for (const rawPart of cookieParts) {
+    const part = rawPart.trim();
+    const separatorIndex = part.indexOf('=');
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = part.slice(0, separatorIndex).trim();
+    if (key !== cookieName) {
+      continue;
+    }
+
+    const value = part.slice(separatorIndex + 1);
+    return decodeURIComponent(value);
+  }
+
+  return null;
+}
+
 export function sessionCookieName() {
   return SESSION_COOKIE_NAME;
 }
@@ -40,5 +61,46 @@ export async function createUserSession(userId: string, request: Request) {
     token: plainToken,
     expiresAt,
     maxAge: SESSION_TTL_SECONDS,
+  };
+}
+
+export async function resolveSessionUser(request: Request) {
+  const cookieHeader = request.headers.get('cookie');
+  if (!cookieHeader) {
+    return null;
+  }
+
+  const token = getCookieValue(cookieHeader, SESSION_COOKIE_NAME);
+  if (!token) {
+    return null;
+  }
+
+  const tokenHash = hashSessionToken(token);
+  const session = await prisma.session.findFirst({
+    where: {
+      tokenHash,
+      revokedAt: null,
+      expiresAt: {
+        gt: new Date(),
+      },
+      user: {
+        isActive: true,
+      },
+    },
+    select: {
+      id: true,
+      userId: true,
+      expiresAt: true,
+    },
+  });
+
+  if (!session) {
+    return null;
+  }
+
+  return {
+    sessionId: session.id,
+    userId: session.userId,
+    expiresAt: session.expiresAt,
   };
 }
