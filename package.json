@@ -5,7 +5,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "prisma:baseline:precheck": "powershell -ExecutionPolicy Bypass -File ./scripts/prisma-baseline-dev.ps1 -Step precheck",
+    "prisma:baseline:reconcile": "powershell -ExecutionPolicy Bypass -File ./scripts/prisma-baseline-dev.ps1 -Step reconcile",
+    "prisma:baseline:create": "powershell -ExecutionPolicy Bypass -File ./scripts/prisma-baseline-dev.ps1 -Step baseline",
+    "prisma:baseline:validate": "powershell -ExecutionPolicy Bypass -File ./scripts/prisma-baseline-dev.ps1 -Step validate",
+    "prisma:baseline:all": "powershell -ExecutionPolicy Bypass -File ./scripts/prisma-baseline-dev.ps1 -Step all"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
