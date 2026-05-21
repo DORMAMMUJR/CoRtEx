@@ -1,6 +1,7 @@
 'use client';
 
 import { BookOpen, CircleAlert, Loader2, Plus } from 'lucide-react';
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
 type CatalogStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
@@ -177,21 +178,25 @@ export default function CatalogsPage() {
       {!isLoading && catalogs.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {catalogs.map((catalog) => (
-            <article key={catalog.id} className="panel-glass rounded-2xl p-5">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="line-clamp-1 text-lg font-semibold text-zinc-100">{catalog.title}</h2>
-                <span
-                  className={`rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.15em] ${statusTheme[catalog.status].className}`}
-                >
-                  {statusTheme[catalog.status].label}
-                </span>
-              </div>
-              <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-zinc-300">
-                {catalog.description?.trim().length
-                  ? catalog.description
-                  : 'Sin descripcion todavia. Agrega detalles para contextualizar este catalogo.'}
-              </p>
-            </article>
+            <Link key={catalog.id} href={`/catalogs/${catalog.id}`} className="group block outline-none">
+              <article className="panel-glass h-full rounded-2xl p-5 transition duration-300 group-hover:border-cyan-300/40 group-hover:bg-white/10 group-hover:shadow-[0_0_15px_rgba(34,211,238,0.1)] group-focus-visible:ring-2 group-focus-visible:ring-cyan-400/50">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="line-clamp-1 text-lg font-semibold text-zinc-100 group-hover:text-cyan-100 transition-colors">
+                    {catalog.title}
+                  </h2>
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.15em] ${statusTheme[catalog.status].className}`}
+                  >
+                    {statusTheme[catalog.status].label}
+                  </span>
+                </div>
+                <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-zinc-300 group-hover:text-zinc-200 transition-colors">
+                  {catalog.description?.trim().length
+                    ? catalog.description
+                    : 'Sin descripcion todavia. Agrega detalles para contextualizar este catalogo.'}
+                </p>
+              </article>
+            </Link>
           ))}
         </div>
       ) : null}
