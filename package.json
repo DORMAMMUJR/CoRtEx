@@ -2,34 +2,15 @@
   "name": "cortex-monorepo",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "prisma:baseline:precheck": "powershell -ExecutionPolicy Bypass -File ./scripts/prisma-baseline-dev.ps1 -Step precheck",
-    "prisma:baseline:reconcile": "powershell -ExecutionPolicy Bypass -File ./scripts/prisma-baseline-dev.ps1 -Step reconcile",
-    "prisma:baseline:create": "powershell -ExecutionPolicy Bypass -File ./scripts/prisma-baseline-dev.ps1 -Step baseline",
-    "prisma:baseline:validate": "powershell -ExecutionPolicy Bypass -File ./scripts/prisma-baseline-dev.ps1 -Step validate",
-    "prisma:baseline:all": "powershell -ExecutionPolicy Bypass -File ./scripts/prisma-baseline-dev.ps1 -Step all"
-  },
-  "dependencies": {
-    "@prisma/client": "^6.19.3",
-    "lucide-react": "^0.553.0",
-    "next": "16.2.6",
-    "puppeteer": "^25.0.4",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "zod": "^4.1.12"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.17",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.6",
-    "prisma": "^6.19.3",
-    "tailwindcss": "^4.1.17",
-    "typescript": "^5"
+    "dev": "npm --prefix cortex run dev",
+    "build": "npm --prefix cortex run build",
+    "start": "npm --prefix cortex run start",
+    "lint": "npm --prefix cortex run lint",
+    "prisma:generate": "npm --prefix cortex run prisma:generate",
+    "prisma:baseline:precheck": "npm --prefix cortex run prisma:baseline:precheck --",
+    "prisma:baseline:reconcile": "npm --prefix cortex run prisma:baseline:reconcile --",
+    "prisma:baseline:create": "npm --prefix cortex run prisma:baseline:create --",
+    "prisma:baseline:validate": "npm --prefix cortex run prisma:baseline:validate --",
+    "prisma:baseline:all": "npm --prefix cortex run prisma:baseline:all --"
   }
 }

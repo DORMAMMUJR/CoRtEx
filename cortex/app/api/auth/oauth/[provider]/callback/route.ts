@@ -195,8 +195,14 @@ export async function GET(request: Request, context: RouteContext) {
           select: { id: true },
         }));
 
-      await tx.oAuthAccount.create({
-        data: {
+      const account = await tx.oAuthAccount.upsert({
+        where: {
+          provider_providerAccountId: {
+            provider: 'GOOGLE',
+            providerAccountId,
+          },
+        },
+        create: {
           userId: user.id,
           provider: 'GOOGLE',
           providerAccountId,
@@ -204,21 +210,33 @@ export async function GET(request: Request, context: RouteContext) {
           refreshToken: tokenPayload.refresh_token ?? null,
           expiresAt,
         },
+        update: {
+          accessToken: tokenPayload.access_token ?? null,
+          refreshToken: tokenPayload.refresh_token ?? null,
+          expiresAt,
+        },
+        select: {
+          userId: true,
+        },
       });
 
-      if (existingUser) {
-        await tx.user.update({
-          where: { id: user.id },
-          data: {
-            fullName,
-            avatarUrl,
-            lastLoginAt: new Date(),
-            isActive: true,
-          },
-        });
-      }
+      await tx.user.update({
+        where: { id: account.userId },
+        data: {
+          fullName,
+          avatarUrl,
+          lastLoginAt: new Date(),
+          isActive: true,
+        },
+      });
 
-      return user.id;
+      await tx.profile.upsert({
+        where: { userId: account.userId },
+        create: { userId: account.userId },
+        update: {},
+      });
+
+      return account.userId;
     });
 
     const session = await createUserSession(userId, request);
@@ -243,10 +261,18 @@ export async function GET(request: Request, context: RouteContext) {
 
     return response;
   } catch (error) {
+    console.error('DETALLES DEL ERROR DEL CALLBACK OAUTH:', error);
+
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return NextResponse.json({ error: 'OAUTH_ACCOUNT_CONFLICT' }, { status: 409 });
     }
 
-    return NextResponse.json({ error: 'UNKNOWN_ERROR' }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: 'UNKNOWN_ERROR',
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
   }
 }
