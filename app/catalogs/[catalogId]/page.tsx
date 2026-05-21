@@ -2,6 +2,8 @@
 
 import {
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
   CircleAlert,
   Image,
   Layers3,
@@ -11,6 +13,7 @@ import {
   Save,
   SlidersHorizontal,
   Tag,
+  Trash2,
   Type,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -107,6 +110,68 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
       };
 
       return next;
+    });
+  }, [selectedIndex]);
+
+  const handleDeleteItem = useCallback(() => {
+    setError(null);
+    setSaveMessage('');
+    setItems((current) => {
+      if (selectedIndex === null || !current[selectedIndex]) {
+        return current;
+      }
+
+      return current
+        .filter((_, index) => index !== selectedIndex)
+        .map((item, index) => ({
+          ...item,
+          position: index,
+        }));
+    });
+    setSelectedIndex(null);
+  }, [selectedIndex]);
+
+  const handleMoveUp = useCallback(() => {
+    setError(null);
+    setSaveMessage('');
+    setItems((current) => {
+      if (selectedIndex === null || selectedIndex <= 0 || !current[selectedIndex]) {
+        return current;
+      }
+
+      const targetIndex = selectedIndex - 1;
+      const next = [...current];
+      [next[targetIndex], next[selectedIndex]] = [next[selectedIndex], next[targetIndex]];
+
+      const normalized = next.map((item, index) => ({
+        ...item,
+        position: index,
+      }));
+
+      setSelectedIndex(targetIndex);
+      return normalized;
+    });
+  }, [selectedIndex]);
+
+  const handleMoveDown = useCallback(() => {
+    setError(null);
+    setSaveMessage('');
+    setItems((current) => {
+      if (selectedIndex === null || selectedIndex >= current.length - 1 || !current[selectedIndex]) {
+        return current;
+      }
+
+      const targetIndex = selectedIndex + 1;
+      const next = [...current];
+      [next[targetIndex], next[selectedIndex]] = [next[selectedIndex], next[targetIndex]];
+
+      const normalized = next.map((item, index) => ({
+        ...item,
+        position: index,
+      }));
+
+      setSelectedIndex(targetIndex);
+      return normalized;
     });
   }, [selectedIndex]);
 
@@ -382,6 +447,37 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
                     </select>
                   </div>
                   <p className="text-xs text-zinc-400">Posicion: {selectedItem.position + 1}</p>
+                  <div className="space-y-2 pt-1">
+                    <p className="text-xs uppercase tracking-[0.14em] text-zinc-400">Acciones</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleMoveUp}
+                        disabled={selectedIndex === 0}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-300/10 px-3 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                        Subir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleMoveDown}
+                        disabled={selectedIndex === items.length - 1}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-300/10 px-3 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                        Bajar
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDeleteItem}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 px-3 py-2 text-xs font-medium text-rose-300 transition hover:bg-rose-400/20"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <p className="text-sm text-zinc-400">Selecciona un elemento en el canvas</p>
