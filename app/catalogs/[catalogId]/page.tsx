@@ -8,6 +8,7 @@ import {
   Image,
   Layers3,
   Loader2,
+  Globe,
   PencilRuler,
   Plus,
   Save,
@@ -70,6 +71,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
   const [items, setItems] = useState<CatalogEditorItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [isUpdatingCatalog, setIsUpdatingCatalog] = useState(false);
   const [isDeletingCatalog, setIsDeletingCatalog] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -400,6 +402,45 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
     }
   }, [catalog, catalogId]);
 
+  const handlePublishCatalog = useCallback(async () => {
+    if (!catalog || catalog.status === 'PUBLISHED') {
+      return;
+    }
+
+    setIsPublishing(true);
+    setError(null);
+    setSaveMessage('');
+
+    try {
+      const response = await fetch(`/api/catalogs/${catalogId}/publish`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { data?: unknown; error?: string }
+        | null;
+
+      if (!response.ok) {
+        setError(readApiError(payload, 'No se pudo publicar el catalogo.'));
+        return;
+      }
+
+      setCatalog((current: any) => ({
+        ...current,
+        status: 'PUBLISHED',
+      }));
+      setSaveMessage('Catalogo publicado');
+      window.setTimeout(() => setSaveMessage(''), 2200);
+    } catch {
+      setError('No se pudo publicar el catalogo.');
+    } finally {
+      setIsPublishing(false);
+    }
+  }, [catalog, catalogId]);
+
   const handleDeleteCatalog = useCallback(async () => {
     if (!window.confirm('Esta accion eliminara el catalogo de forma permanente. Deseas continuar?')) return;
 
@@ -448,15 +489,31 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
           {isDirty ? <span className="text-xs text-amber-200/90">Cambios sin guardar</span> : null}
         </div>
 
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!isDirty || isSaving || isLoading}
-          className="inline-flex items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-300/15 px-4 py-2 text-sm font-medium text-emerald-100 transition hover:bg-emerald-300/25 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Guardar
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handlePublishCatalog}
+            disabled={catalog?.status === 'PUBLISHED' || isPublishing || isLoading}
+            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
+              catalog?.status === 'PUBLISHED'
+                ? 'border-fuchsia-300/20 bg-fuchsia-300/10 text-fuchsia-200/60'
+                : 'border-fuchsia-300/45 bg-fuchsia-300/15 text-fuchsia-100 hover:bg-fuchsia-300/25'
+            }`}
+          >
+            {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+            {catalog?.status === 'PUBLISHED' ? 'Publicado' : 'Publicar'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!isDirty || isSaving || isLoading}
+            className="inline-flex items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-300/15 px-4 py-2 text-sm font-medium text-emerald-100 transition hover:bg-emerald-300/25 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Guardar
+          </button>
+        </div>
       </header>
 
       <div className="flex min-h-[calc(100vh-180px)] gap-4">
