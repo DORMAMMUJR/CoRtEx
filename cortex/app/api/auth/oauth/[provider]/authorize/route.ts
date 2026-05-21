@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { oauthProviderSchema } from '../../../../../lib/contracts/auth';
-import { createOAuthState, createOAuthStateCookieName } from '../../../../../lib/server/session';
+import { createClient as createSupabaseServerClient } from '@/lib/supabase/server';
 
 type RouteContext = {
   params: Promise<{ provider: string }>;
@@ -16,10 +16,6 @@ function resolveCanonicalBaseUrl(request: Request) {
   return `${requestUrl.protocol}//${requestUrl.host}`;
 }
 
-function shouldUseSecureCookies(baseUrl: string) {
-  return new URL(baseUrl).protocol === 'https:';
-}
-
 export async function GET(request: Request, context: RouteContext) {
   const { provider } = await context.params;
   const parsedProvider = oauthProviderSchema.safeParse(provider);
@@ -28,33 +24,22 @@ export async function GET(request: Request, context: RouteContext) {
     return NextResponse.json({ error: 'OAUTH_UNSUPPORTED_PROVIDER' }, { status: 400 });
   }
 
-  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
-  if (!clientId) {
+  const baseUrl = resolveCanonicalBaseUrl(request);
+  const callbackUrl = `${baseUrl}/api/auth/oauth/google/callback`;
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: callbackUrl,
+      queryParams: {
+        prompt: 'select_account',
+      },
+    },
+  });
+
+  if (error || !data.url) {
     return NextResponse.json({ error: 'OAUTH_NOT_CONFIGURED' }, { status: 503 });
   }
 
-  const baseUrl = resolveCanonicalBaseUrl(request);
-  const callbackUrl = `${baseUrl}/api/auth/oauth/google/callback`;
-  const state = createOAuthState();
-  const stateCookieName = createOAuthStateCookieName('GOOGLE');
-  const secureCookies = shouldUseSecureCookies(baseUrl);
-
-  const authorizeUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  authorizeUrl.searchParams.set('client_id', clientId);
-  authorizeUrl.searchParams.set('redirect_uri', callbackUrl);
-  authorizeUrl.searchParams.set('response_type', 'code');
-  authorizeUrl.searchParams.set('scope', 'openid email profile');
-  authorizeUrl.searchParams.set('state', state);
-  authorizeUrl.searchParams.set('prompt', 'select_account');
-
-  const response = NextResponse.redirect(authorizeUrl.toString());
-  response.cookies.set(stateCookieName, state, {
-    httpOnly: true,
-    secure: secureCookies,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 10,
-  });
-
-  return response;
+  return NextResponse.redirect(data.url);
 }

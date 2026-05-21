@@ -1,29 +1,14 @@
-import { createHash } from 'node:crypto';
 import Link from 'next/link';
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { prisma } from '../lib/server/prisma';
+import { AuthError, requireAuthenticatedPageUserId } from '../lib/server/auth';
 
 async function requireDashboardSession() {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get('cmk_session')?.value;
-
-  if (!sessionToken) {
-    redirect('/');
-  }
-
-  const tokenHash = createHash('sha256').update(sessionToken).digest('hex');
-  const session = await prisma.session.findFirst({
-    where: {
-      tokenHash,
-      revokedAt: null,
-      expiresAt: { gt: new Date() },
-      user: { isActive: true },
-    },
-    select: { id: true },
-  });
-
-  if (!session) {
+  try {
+    await requireAuthenticatedPageUserId();
+  } catch (error) {
+    if (error instanceof AuthError) {
+      redirect('/');
+    }
     redirect('/');
   }
 }
