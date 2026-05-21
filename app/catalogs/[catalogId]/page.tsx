@@ -64,9 +64,11 @@ function normalizeItems(rawItems: unknown): CatalogEditorItem[] {
 
 export default function CatalogVisualEditorPage(props: CatalogVisualEditorPageProps) {
   const { catalogId } = React.use(props.params);
+  const [catalog, setCatalog] = useState<any>(null);
   const [items, setItems] = useState<CatalogEditorItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUpdatingCatalog, setIsUpdatingCatalog] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState('');
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -205,7 +207,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
         });
 
         const directPayload = (await directResponse.json().catch(() => null)) as
-          | { data?: { items?: unknown }; error?: string }
+          | { data?: { id?: string; title?: string; description?: string; status?: string; items?: unknown }; error?: string }
           | null;
 
         if (directResponse.ok && directPayload?.data) {
@@ -214,6 +216,12 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
           }
 
           setItems(normalizeItems(directPayload.data.items));
+          setCatalog({
+            id: directPayload.data.id ?? catalogId,
+            title: directPayload.data.title ?? '',
+            description: directPayload.data.description ?? '',
+            status: directPayload.data.status ?? 'DRAFT',
+          });
           setSelectedIndex(null);
           return;
         }
@@ -224,7 +232,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
         });
 
         const listPayload = (await listResponse.json().catch(() => null)) as
-          | { data?: Array<{ id?: string; items?: unknown }>; error?: string }
+          | { data?: Array<{ id?: string; title?: string; description?: string; status?: string; items?: unknown }>; error?: string }
           | null;
 
         if (!listResponse.ok) {
@@ -245,6 +253,16 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
         }
 
         setItems(normalizeItems(catalog?.items));
+        setCatalog(
+          catalog
+            ? {
+                id: catalog.id ?? catalogId,
+                title: catalog.title ?? '',
+                description: catalog.description ?? '',
+                status: catalog.status ?? 'DRAFT',
+              }
+            : null,
+        );
         setSelectedIndex(null);
       } catch {
         if (!isMounted) {
@@ -300,6 +318,53 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
     }
   }, [catalogId, items]);
 
+  const handleUpdateCatalog = useCallback(async () => {
+    if (!catalog) {
+      return;
+    }
+
+    setIsUpdatingCatalog(true);
+    setError(null);
+    setSaveMessage('');
+
+    try {
+      const response = await fetch(`/api/catalogs/${catalogId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          title: catalog.title ?? '',
+          description: catalog.description ?? '',
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            data?: { id?: string; title?: string; description?: string; status?: string };
+            error?: string;
+          }
+        | null;
+
+      if (!response.ok) {
+        setError(readApiError(payload, 'No se pudo actualizar el catalogo.'));
+        return;
+      }
+
+      setCatalog((current: any) => ({
+        ...current,
+        ...(payload?.data ?? {}),
+      }));
+      setSaveMessage('Catalogo actualizado');
+      window.setTimeout(() => setSaveMessage(''), 2200);
+    } catch {
+      setError('No se pudo actualizar el catalogo.');
+    } finally {
+      setIsUpdatingCatalog(false);
+    }
+  }, [catalog, catalogId]);
+
   return (
     <section className="min-h-screen space-y-5">
       <header className="panel-glass flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4 sm:p-5">
@@ -311,7 +376,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
             <ArrowLeft className="h-4 w-4" />
             Volver
           </Link>
-          <h1 className="text-lg font-semibold text-zinc-100 sm:text-xl">Editor Visual del Catalogo</h1>
+          <h1 className="text-lg font-semibold text-zinc-100 sm:text-xl">{catalog?.title || 'Cargando...'}</h1>
         </div>
 
         <button
@@ -478,6 +543,55 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
                       Eliminar
                     </button>
                   </div>
+                </div>
+              ) : selectedIndex === null && catalog ? (
+                <div className="space-y-3">
+                  <p className="text-xs uppercase tracking-[0.14em] text-zinc-400">Catalogo</p>
+                  <div className="space-y-1">
+                    <label htmlFor="catalog-title" className="text-xs text-zinc-400">
+                      Titulo
+                    </label>
+                    <input
+                      id="catalog-title"
+                      type="text"
+                      value={catalog.title ?? ''}
+                      onChange={(event) =>
+                        setCatalog((current: any) => ({
+                          ...current,
+                          title: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-cyan-300/55 focus:ring-1 focus:ring-cyan-300/50"
+                      placeholder="Titulo del catalogo"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="catalog-description" className="text-xs text-zinc-400">
+                      Descripcion
+                    </label>
+                    <textarea
+                      id="catalog-description"
+                      value={catalog.description ?? ''}
+                      onChange={(event) =>
+                        setCatalog((current: any) => ({
+                          ...current,
+                          description: event.target.value,
+                        }))
+                      }
+                      rows={4}
+                      className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-cyan-300/55 focus:ring-1 focus:ring-cyan-300/50"
+                      placeholder="Descripcion del catalogo"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleUpdateCatalog}
+                    disabled={isUpdatingCatalog}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-300/10 px-3 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isUpdatingCatalog ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Actualizar Catalogo
+                  </button>
                 </div>
               ) : (
                 <p className="text-sm text-zinc-400">Selecciona un elemento en el canvas</p>
