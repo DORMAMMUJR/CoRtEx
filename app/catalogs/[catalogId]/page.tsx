@@ -1,6 +1,18 @@
 'use client';
 
-import { ArrowLeft, CircleAlert, Layers3, Loader2, PencilRuler, Plus, Save, SlidersHorizontal } from 'lucide-react';
+import {
+  ArrowLeft,
+  CircleAlert,
+  Image,
+  Layers3,
+  Loader2,
+  PencilRuler,
+  Plus,
+  Save,
+  SlidersHorizontal,
+  Tag,
+  Type,
+} from 'lucide-react';
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -54,20 +66,64 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-  const selectedItem = useMemo(() => items[0] ?? null, [items]);
+  const selectedItem = useMemo(() => {
+    if (selectedIndex === null) {
+      return null;
+    }
+
+    return items[selectedIndex] ?? null;
+  }, [items, selectedIndex]);
 
   const handleAddItem = useCallback(() => {
     setError(null);
     setSaveMessage('');
-    setItems((current) => [
-      ...current,
-      {
+    setItems((current) => {
+      const nextIndex = current.length;
+      setSelectedIndex(nextIndex);
+
+      return [
+        ...current,
+        {
         type: 'TEXT',
         name: `Bloque ${current.length + 1}`,
         position: current.length,
-      },
-    ]);
+        },
+      ];
+    });
+  }, []);
+
+  const updateSelectedItem = useCallback((field: string, value: any) => {
+    setItems((current) => {
+      if (selectedIndex === null || !current[selectedIndex]) {
+        return current;
+      }
+
+      const next = [...current];
+      next[selectedIndex] = {
+        ...next[selectedIndex],
+        [field]: value,
+      };
+
+      return next;
+    });
+  }, [selectedIndex]);
+
+  const getItemIcon = useCallback((type: string) => {
+    if (type === 'TEXT') {
+      return Type;
+    }
+
+    if (type === 'IMAGE') {
+      return Image;
+    }
+
+    if (type === 'PRODUCT') {
+      return Tag;
+    }
+
+    return Layers3;
   }, []);
 
   useEffect(() => {
@@ -93,6 +149,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
           }
 
           setItems(normalizeItems(directPayload.data.items));
+          setSelectedIndex(null);
           return;
         }
 
@@ -123,6 +180,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
         }
 
         setItems(normalizeItems(catalog?.items));
+        setSelectedIndex(null);
       } catch {
         if (!isMounted) {
           return;
@@ -248,10 +306,38 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
               <div className="grid h-full place-items-center rounded-xl border border-white/10 bg-black/20 text-sm text-zinc-400">
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>
+            ) : items.length === 0 ? (
+              <div className="grid h-full place-items-center rounded-xl border border-white/10 bg-black/20 text-sm text-zinc-400">
+                No hay elementos todavia
+              </div>
             ) : (
-              <pre className="overflow-auto whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-zinc-400">
-                {JSON.stringify(items, null, 2)}
-              </pre>
+              <div className="space-y-3">
+                {items.map((item, index) => {
+                  const ItemIcon = getItemIcon(item.type);
+                  const isSelected = selectedIndex === index;
+
+                  return (
+                    <button
+                      key={`${item.id ?? 'item'}-${index}`}
+                      type="button"
+                      onClick={() => setSelectedIndex(index)}
+                      className={`panel-glass flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
+                        isSelected
+                          ? 'ring-2 ring-cyan-400 border-cyan-300/40 bg-cyan-300/10'
+                          : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.08]'
+                      }`}
+                    >
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-black/20 text-cyan-100">
+                        <ItemIcon className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-zinc-100">{item.name || 'Sin nombre'}</p>
+                        <p className="text-xs uppercase tracking-[0.12em] text-zinc-400">{item.type}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
         </main>
@@ -264,14 +350,41 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
           <div className="space-y-3">
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm text-zinc-300">
               {selectedItem ? (
-                <div className="space-y-1">
+                <div className="space-y-3">
                   <p className="text-xs uppercase tracking-[0.14em] text-zinc-400">Elemento activo</p>
-                  <p className="font-medium text-zinc-100">{selectedItem.name || 'Sin nombre'}</p>
-                  <p className="text-xs text-zinc-300">Tipo: {selectedItem.type}</p>
+                  <div className="space-y-1">
+                    <label htmlFor="item-name" className="text-xs text-zinc-400">
+                      Nombre
+                    </label>
+                    <input
+                      id="item-name"
+                      type="text"
+                      value={selectedItem.name ?? ''}
+                      onChange={(event) => updateSelectedItem('name', event.target.value)}
+                      className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-cyan-300/55 focus:ring-1 focus:ring-cyan-300/50"
+                      placeholder="Nombre del elemento"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="item-type" className="text-xs text-zinc-400">
+                      Tipo
+                    </label>
+                    <select
+                      id="item-type"
+                      value={selectedItem.type ?? 'TEXT'}
+                      onChange={(event) => updateSelectedItem('type', event.target.value)}
+                      className="w-full rounded-lg border border-white/15 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-300/55 focus:ring-1 focus:ring-cyan-300/50"
+                    >
+                      <option value="TEXT">TEXT</option>
+                      <option value="PRODUCT">PRODUCT</option>
+                      <option value="IMAGE">IMAGE</option>
+                      <option value="CTA">CTA</option>
+                    </select>
+                  </div>
                   <p className="text-xs text-zinc-400">Posicion: {selectedItem.position + 1}</p>
                 </div>
               ) : (
-                'Configuracion del elemento'
+                <p className="text-sm text-zinc-400">Selecciona un elemento en el canvas</p>
               )}
             </div>
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm text-zinc-300">
