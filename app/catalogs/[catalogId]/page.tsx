@@ -17,6 +17,7 @@ import {
   Type,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 type CatalogEditorItem = {
@@ -64,11 +65,14 @@ function normalizeItems(rawItems: unknown): CatalogEditorItem[] {
 
 export default function CatalogVisualEditorPage(props: CatalogVisualEditorPageProps) {
   const { catalogId } = React.use(props.params);
+  const router = useRouter();
   const [catalog, setCatalog] = useState<any>(null);
   const [items, setItems] = useState<CatalogEditorItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUpdatingCatalog, setIsUpdatingCatalog] = useState(false);
+  const [isDeletingCatalog, setIsDeletingCatalog] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState('');
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -84,6 +88,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
   const handleAddItem = useCallback(() => {
     setError(null);
     setSaveMessage('');
+    setIsDirty(true);
     setItems((current) => {
       const nextIndex = current.length;
       setSelectedIndex(nextIndex);
@@ -100,8 +105,13 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
   }, []);
 
   const updateSelectedItem = useCallback((field: string, value: any) => {
+    let didChange = false;
     setItems((current) => {
       if (selectedIndex === null || !current[selectedIndex]) {
+        return current;
+      }
+
+      if (current[selectedIndex][field] === value) {
         return current;
       }
 
@@ -110,12 +120,19 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
         ...next[selectedIndex],
         [field]: value,
       };
+      didChange = true;
 
       return next;
     });
+    if (didChange) {
+      setIsDirty(true);
+    }
   }, [selectedIndex]);
 
   const handleDeleteItem = useCallback(() => {
+    if (!window.confirm('Seguro que deseas eliminar este elemento?')) return;
+
+    let didChange = false;
     setError(null);
     setSaveMessage('');
     setItems((current) => {
@@ -123,6 +140,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
         return current;
       }
 
+      didChange = true;
       return current
         .filter((_, index) => index !== selectedIndex)
         .map((item, index) => ({
@@ -130,10 +148,14 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
           position: index,
         }));
     });
-    setSelectedIndex(null);
+    if (didChange) {
+      setIsDirty(true);
+      setSelectedIndex(null);
+    }
   }, [selectedIndex]);
 
   const handleMoveUp = useCallback(() => {
+    let didChange = false;
     setError(null);
     setSaveMessage('');
     setItems((current) => {
@@ -150,12 +172,17 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
         position: index,
       }));
 
+      didChange = true;
       setSelectedIndex(targetIndex);
       return normalized;
     });
+    if (didChange) {
+      setIsDirty(true);
+    }
   }, [selectedIndex]);
 
   const handleMoveDown = useCallback(() => {
+    let didChange = false;
     setError(null);
     setSaveMessage('');
     setItems((current) => {
@@ -172,9 +199,13 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
         position: index,
       }));
 
+      didChange = true;
       setSelectedIndex(targetIndex);
       return normalized;
     });
+    if (didChange) {
+      setIsDirty(true);
+    }
   }, [selectedIndex]);
 
   const getItemIcon = useCallback((type: string) => {
@@ -222,6 +253,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
             description: directPayload.data.description ?? '',
             status: directPayload.data.status ?? 'DRAFT',
           });
+          setIsDirty(false);
           setSelectedIndex(null);
           return;
         }
@@ -263,6 +295,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
               }
             : null,
         );
+        setIsDirty(false);
         setSelectedIndex(null);
       } catch {
         if (!isMounted) {
@@ -309,6 +342,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
       }
 
       setItems(normalizeItems(payload?.data));
+      setIsDirty(false);
       setSaveMessage('Cambios guardados');
       window.setTimeout(() => setSaveMessage(''), 2200);
     } catch {
@@ -356,6 +390,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
         ...current,
         ...(payload?.data ?? {}),
       }));
+      setIsDirty(false);
       setSaveMessage('Catalogo actualizado');
       window.setTimeout(() => setSaveMessage(''), 2200);
     } catch {
@@ -364,6 +399,39 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
       setIsUpdatingCatalog(false);
     }
   }, [catalog, catalogId]);
+
+  const handleDeleteCatalog = useCallback(async () => {
+    if (!window.confirm('Esta accion eliminara el catalogo de forma permanente. Deseas continuar?')) return;
+
+    setIsDeletingCatalog(true);
+    setError(null);
+    setSaveMessage('');
+
+    try {
+      const response = await fetch(`/api/catalogs/${catalogId}`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { data?: unknown; error?: string }
+        | null;
+
+      if (!response.ok) {
+        setError(readApiError(payload, 'No se pudo eliminar el catalogo.'));
+        return;
+      }
+
+      setIsDirty(false);
+      router.push('/catalogs');
+    } catch {
+      setError('No se pudo eliminar el catalogo.');
+    } finally {
+      setIsDeletingCatalog(false);
+    }
+  }, [catalogId, router]);
 
   return (
     <section className="min-h-screen space-y-5">
@@ -377,33 +445,19 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
             Volver
           </Link>
           <h1 className="text-lg font-semibold text-zinc-100 sm:text-xl">{catalog?.title || 'Cargando...'}</h1>
+          {isDirty ? <span className="text-xs text-amber-200/90">Cambios sin guardar</span> : null}
         </div>
 
         <button
           type="button"
           onClick={handleSave}
-          disabled={isSaving || isLoading}
+          disabled={!isDirty || isSaving || isLoading}
           className="inline-flex items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-300/15 px-4 py-2 text-sm font-medium text-emerald-100 transition hover:bg-emerald-300/25 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Guardar
         </button>
       </header>
-
-      {error ? (
-        <article className="panel-glass rounded-2xl border-rose-300/30 p-3">
-          <p className="flex items-center gap-2 text-sm text-rose-200">
-            <CircleAlert className="h-4 w-4" />
-            {error}
-          </p>
-        </article>
-      ) : null}
-
-      {saveMessage ? (
-        <article className="panel-glass rounded-2xl border-emerald-300/30 p-3">
-          <p className="text-sm text-emerald-200">{saveMessage}</p>
-        </article>
-      ) : null}
 
       <div className="flex min-h-[calc(100vh-180px)] gap-4">
         <aside className="panel-glass w-64 shrink-0 rounded-2xl p-4">
@@ -431,7 +485,10 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
             <Layers3 className="h-4 w-4 text-cyan-200" />
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em]">Canvas</h2>
           </div>
-          <div className="flex-1 rounded-2xl border border-dashed border-white/20 bg-white/[0.02] p-4">
+          <div
+            className="flex-1 rounded-2xl border border-dashed border-white/20 bg-white/[0.02] p-4"
+            onClick={() => setSelectedIndex(null)}
+          >
             {isLoading ? (
               <div className="grid h-full place-items-center rounded-xl border border-white/10 bg-black/20 text-sm text-zinc-400">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -450,7 +507,10 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
                     <button
                       key={`${item.id ?? 'item'}-${index}`}
                       type="button"
-                      onClick={() => setSelectedIndex(index)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSelectedIndex(index);
+                      }}
                       className={`panel-glass flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
                         isSelected
                           ? 'ring-2 ring-cyan-400 border-cyan-300/40 bg-cyan-300/10'
@@ -555,12 +615,13 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
                       id="catalog-title"
                       type="text"
                       value={catalog.title ?? ''}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setIsDirty(true);
                         setCatalog((current: any) => ({
                           ...current,
                           title: event.target.value,
-                        }))
-                      }
+                        }));
+                      }}
                       className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-cyan-300/55 focus:ring-1 focus:ring-cyan-300/50"
                       placeholder="Titulo del catalogo"
                     />
@@ -572,12 +633,13 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
                     <textarea
                       id="catalog-description"
                       value={catalog.description ?? ''}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setIsDirty(true);
                         setCatalog((current: any) => ({
                           ...current,
                           description: event.target.value,
-                        }))
-                      }
+                        }));
+                      }}
                       rows={4}
                       className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-cyan-300/55 focus:ring-1 focus:ring-cyan-300/50"
                       placeholder="Descripcion del catalogo"
@@ -592,6 +654,15 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
                     {isUpdatingCatalog ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                     Actualizar Catalogo
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteCatalog}
+                    disabled={isDeletingCatalog}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 px-3 py-2 text-xs font-medium text-rose-300 transition hover:bg-rose-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isDeletingCatalog ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    Eliminar Catalogo
+                  </button>
                 </div>
               ) : (
                 <p className="text-sm text-zinc-400">Selecciona un elemento en el canvas</p>
@@ -605,6 +676,22 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
             </div>
           </div>
         </aside>
+      </div>
+
+      <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2">
+        {saveMessage ? (
+          <article className="panel-glass rounded-xl border border-emerald-300/30 p-3 shadow-lg shadow-black/25">
+            <p className="text-sm text-emerald-200">{saveMessage}</p>
+          </article>
+        ) : null}
+        {error ? (
+          <article className="panel-glass rounded-xl border border-rose-300/30 p-3 shadow-lg shadow-black/25">
+            <p className="flex items-center gap-2 text-sm text-rose-200">
+              <CircleAlert className="h-4 w-4" />
+              {error}
+            </p>
+          </article>
+        ) : null}
       </div>
     </section>
   );
