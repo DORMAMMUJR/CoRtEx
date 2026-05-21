@@ -20,6 +20,12 @@ type NormalizedOAuthProfile = {
   avatarUrl?: string;
 };
 
+type OAuthTokenPayload = {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+};
+
 class OAuthFlowError extends Error {
   constructor(
     public readonly code:
@@ -43,8 +49,8 @@ const providerConfigs: Record<Lowercase<OAuthProvider>, OAuthProviderConfig> = {
     tokenUrl: 'https://oauth2.googleapis.com/token',
     userInfoUrl: 'https://www.googleapis.com/oauth2/v3/userinfo',
     scopes: ['openid', 'email', 'profile'],
-    clientIdEnv: 'GOOGLE_OAUTH_CLIENT_ID',
-    clientSecretEnv: 'GOOGLE_OAUTH_CLIENT_SECRET',
+    clientIdEnv: 'GOOGLE_CLIENT_ID',
+    clientSecretEnv: 'GOOGLE_CLIENT_SECRET',
   },
   facebook: {
     provider: 'FACEBOOK',
@@ -78,7 +84,7 @@ export function getProviderConfig(provider: string) {
 }
 
 export function resolveAppBaseUrl(request: Request) {
-  const envBaseUrl = process.env.APP_BASE_URL?.trim();
+  const envBaseUrl = process.env.APP_BASE_URL?.trim() ?? process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (envBaseUrl) {
     return envBaseUrl.replace(/\/$/, '');
   }
@@ -101,7 +107,7 @@ async function exchangeCodeForToken(
   config: ReturnType<typeof getProviderConfig>,
   code: string,
   callbackUrl: string,
-) {
+): Promise<OAuthTokenPayload> {
   if (config.provider === 'GOOGLE') {
     const response = await fetch(config.tokenUrl, {
       method: 'POST',
@@ -120,11 +126,7 @@ async function exchangeCodeForToken(
       throw new OAuthFlowError('OAUTH_TOKEN_EXCHANGE_FAILED');
     }
 
-    const token = (await response.json()) as {
-      access_token?: string;
-      refresh_token?: string;
-      expires_in?: number;
-    };
+    const token = (await response.json()) as OAuthTokenPayload;
 
     if (!token.access_token) {
       throw new OAuthFlowError('OAUTH_TOKEN_EXCHANGE_FAILED');
@@ -144,10 +146,7 @@ async function exchangeCodeForToken(
     throw new OAuthFlowError('OAUTH_TOKEN_EXCHANGE_FAILED');
   }
 
-  const token = (await response.json()) as {
-    access_token?: string;
-    expires_in?: number;
-  };
+  const token = (await response.json()) as OAuthTokenPayload;
 
   if (!token.access_token) {
     throw new OAuthFlowError('OAUTH_TOKEN_EXCHANGE_FAILED');

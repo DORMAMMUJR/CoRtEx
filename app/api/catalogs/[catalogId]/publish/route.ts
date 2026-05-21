@@ -7,9 +7,9 @@ import { AuthError, requireAuthenticatedUserId } from '../../../../lib/server/au
 import { prisma } from '../../../../lib/server/prisma';
 
 type PublishRouteContext = {
-  params: {
+  params: Promise<{
     catalogId: string;
-  };
+  }>;
 };
 
 function hashPublicationPassword(password: string) {
@@ -19,6 +19,7 @@ function hashPublicationPassword(password: string) {
 }
 
 export async function POST(request: Request, context: PublishRouteContext) {
+  const { catalogId } = await context.params;
   const limiter = checkRateLimit('catalogs:publish', { limit: 40, windowMs: 60_000 });
   if (!limiter.allowed) {
     return NextResponse.json({ error: 'RATE_LIMITED', resetAt: limiter.resetAt }, { status: 429 });
@@ -27,7 +28,7 @@ export async function POST(request: Request, context: PublishRouteContext) {
   const body = await request.json();
   const parsed = publishCatalogSchema.safeParse({
     ...body,
-    catalogId: context.params.catalogId,
+    catalogId,
   });
 
   if (!parsed.success) {

@@ -102,7 +102,7 @@ export async function POST(request: Request) {
                 price: item.price,
                 currency: item.currency,
                 imageUrl: item.imageUrl,
-                metadata: item.metadata,
+                metadata: item.metadata as Prisma.InputJsonValue | undefined,
               })),
             }
           : undefined,
