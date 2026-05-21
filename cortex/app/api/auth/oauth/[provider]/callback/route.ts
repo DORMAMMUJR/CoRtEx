@@ -10,15 +10,8 @@ type RouteContext = {
 
 function resolveCanonicalBaseUrl(request: Request) {
   const trimmedProd = process.env.APP_BASE_URL?.trim() ?? process.env.NEXT_PUBLIC_APP_URL?.trim() ?? '';
-  if (process.env.NODE_ENV === 'production') {
-    if (trimmedProd) {
-      return trimmedProd.replace(/\/$/, '');
-    }
-  }
-
-  const trimmedDev = process.env.APP_BASE_URL_DEV?.trim() ?? '';
-  if (trimmedDev) {
-    return trimmedDev.replace(/\/$/, '');
+  if (process.env.NODE_ENV === 'production' && trimmedProd) {
+    return trimmedProd.replace(/\/$/, '');
   }
 
   const requestUrl = new URL(request.url);
