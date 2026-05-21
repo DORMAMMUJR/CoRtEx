@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { randomBytes, scryptSync } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { publishCatalogSchema } from '../../../../lib/contracts/catalog';
+import { hashPassword } from '../../../../lib/security/password-hash';
 import { checkRateLimit } from '../../../../lib/security/rate-limit';
 import { AuthError, requireAuthenticatedUserId } from '../../../../lib/server/auth';
 import { prisma } from '../../../../lib/server/prisma';
@@ -11,12 +11,6 @@ type PublishRouteContext = {
     catalogId: string;
   }>;
 };
-
-function hashPublicationPassword(password: string) {
-  const salt = randomBytes(16);
-  const digest = scryptSync(password, salt, 64);
-  return `${salt.toString('hex')}:${Buffer.from(digest).toString('hex')}`;
-}
 
 export async function POST(request: Request, context: PublishRouteContext) {
   const { catalogId } = await context.params;
@@ -51,7 +45,7 @@ export async function POST(request: Request, context: PublishRouteContext) {
     }
 
     const now = new Date();
-    const passwordHash = parsed.data.password ? hashPublicationPassword(parsed.data.password) : null;
+    const passwordHash = parsed.data.password ? hashPassword(parsed.data.password) : null;
 
     const [data] = await prisma.$transaction([
       prisma.catalog.update({

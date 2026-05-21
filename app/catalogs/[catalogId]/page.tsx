@@ -20,13 +20,28 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import type { CatalogItemInput } from '../../lib/contracts/catalog';
 
+type CatalogItemType = CatalogItemInput['type'];
+
+type CatalogEditorMetadata = Record<string, unknown>;
 type CatalogEditorItem = {
   id?: string;
-  type: string;
-  name: string;
+  type: CatalogItemType;
+  name?: string;
+  description?: string;
+  price?: number;
+  currency?: string;
+  imageUrl?: string;
+  metadata?: CatalogEditorMetadata;
   position: number;
-  [key: string]: any;
+};
+
+type CatalogEditorRecord = {
+  id: string;
+  title: string;
+  description: string;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 };
 
 type CatalogVisualEditorPageProps = {
@@ -54,20 +69,49 @@ function normalizeItems(rawItems: unknown): CatalogEditorItem[] {
   return rawItems.map((item, index) => {
     const record = typeof item === 'object' && item !== null ? (item as Record<string, unknown>) : {};
 
+    const type: CatalogItemType =
+      record.type === 'TEXT' || record.type === 'IMAGE' || record.type === 'PRODUCT' || record.type === 'CTA'
+        ? record.type
+        : 'TEXT';
+
+    const metadata =
+      typeof record.metadata === 'object' && record.metadata !== null ? (record.metadata as CatalogEditorMetadata) : undefined;
+
     return {
-      ...record,
       id: typeof record.id === 'string' ? record.id : undefined,
-      type: typeof record.type === 'string' ? record.type : 'TEXT',
+      type,
       name: typeof record.name === 'string' && record.name.length ? record.name : `Elemento ${index + 1}`,
+      description: typeof record.description === 'string' ? record.description : undefined,
+      price: typeof record.price === 'number' ? record.price : undefined,
+      currency: typeof record.currency === 'string' ? record.currency : 'MXN',
+      imageUrl: typeof record.imageUrl === 'string' ? record.imageUrl : undefined,
+      metadata,
       position: typeof record.position === 'number' ? record.position : index,
     };
   });
 }
 
+function normalizeCatalogRecord(rawCatalog: unknown, fallbackId: string): CatalogEditorRecord | null {
+  if (typeof rawCatalog !== 'object' || rawCatalog === null) {
+    return null;
+  }
+
+  const record = rawCatalog as Record<string, unknown>;
+  const status: CatalogEditorRecord['status'] =
+    record.status === 'PUBLISHED' || record.status === 'ARCHIVED' ? record.status : 'DRAFT';
+
+  return {
+    id: typeof record.id === 'string' ? record.id : fallbackId,
+    title: typeof record.title === 'string' ? record.title : '',
+    description: typeof record.description === 'string' ? record.description : '',
+    status,
+  };
+}
+
 export default function CatalogVisualEditorPage(props: CatalogVisualEditorPageProps) {
   const { catalogId } = React.use(props.params);
   const router = useRouter();
-  const [catalog, setCatalog] = useState<any>(null);
+  const [catalog, setCatalog] = useState<CatalogEditorRecord | null>(null);
   const [items, setItems] = useState<CatalogEditorItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -106,7 +150,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
     });
   }, []);
 
-  const updateSelectedItem = useCallback((field: string, value: any) => {
+  const updateSelectedItem = useCallback(<K extends keyof CatalogEditorItem,>(field: K, value: CatalogEditorItem[K]) => {
     let didChange = false;
     setItems((current) => {
       if (selectedIndex === null || !current[selectedIndex]) {
@@ -121,7 +165,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
       next[selectedIndex] = {
         ...next[selectedIndex],
         [field]: value,
-      };
+      } as CatalogEditorItem;
       didChange = true;
 
       return next;
@@ -210,7 +254,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
     }
   }, [selectedIndex]);
 
-  const getItemIcon = useCallback((type: string) => {
+  const getItemIcon = useCallback((type: CatalogItemType) => {
     if (type === 'TEXT') {
       return Type;
     }
@@ -234,69 +278,40 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
       setError(null);
 
       try {
-        const directResponse = await fetch(`/api/catalogs/${catalogId}`, {
+        const response = await fetch(`/api/catalogs/${catalogId}`, {
           headers: { Accept: 'application/json' },
           cache: 'no-store',
         });
 
-        const directPayload = (await directResponse.json().catch(() => null)) as
-          | { data?: { id?: string; title?: string; description?: string; status?: string; items?: unknown }; error?: string }
+        const payload = (await response.json().catch(() => null)) as
+          | { data?: { items?: unknown } & Record<string, unknown>; error?: string }
           | null;
 
-        if (directResponse.ok && directPayload?.data) {
-          if (!isMounted) {
-            return;
+        if (!response.ok) {
+          if (isMounted) {
+            setError(readApiError(payload, 'No se pudo cargar el catalogo.'));
+            setCatalog(null);
+            setItems([]);
           }
-
-          setItems(normalizeItems(directPayload.data.items));
-          setCatalog({
-            id: directPayload.data.id ?? catalogId,
-            title: directPayload.data.title ?? '',
-            description: directPayload.data.description ?? '',
-            status: directPayload.data.status ?? 'DRAFT',
-          });
-          setIsDirty(false);
-          setSelectedIndex(null);
           return;
         }
 
-        const listResponse = await fetch('/api/catalogs', {
-          headers: { Accept: 'application/json' },
-          cache: 'no-store',
-        });
-
-        const listPayload = (await listResponse.json().catch(() => null)) as
-          | { data?: Array<{ id?: string; title?: string; description?: string; status?: string; items?: unknown }>; error?: string }
-          | null;
-
-        if (!listResponse.ok) {
-          if (!isMounted) {
-            return;
+        const nextCatalog = normalizeCatalogRecord(payload?.data, catalogId);
+        if (!nextCatalog) {
+          if (isMounted) {
+            setError('No se pudo cargar el catalogo.');
+            setCatalog(null);
+            setItems([]);
           }
-
-          setError(readApiError(listPayload, 'No se pudo cargar el catalogo.'));
           return;
         }
-
-        const catalog = Array.isArray(listPayload?.data)
-          ? listPayload.data.find((entry) => entry?.id === catalogId)
-          : null;
 
         if (!isMounted) {
           return;
         }
 
-        setItems(normalizeItems(catalog?.items));
-        setCatalog(
-          catalog
-            ? {
-                id: catalog.id ?? catalogId,
-                title: catalog.title ?? '',
-                description: catalog.description ?? '',
-                status: catalog.status ?? 'DRAFT',
-              }
-            : null,
-        );
+        setItems(normalizeItems(payload?.data?.items));
+        setCatalog(nextCatalog);
         setIsDirty(false);
         setSelectedIndex(null);
       } catch {
@@ -388,10 +403,10 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
         return;
       }
 
-      setCatalog((current: any) => ({
-        ...current,
-        ...(payload?.data ?? {}),
-      }));
+      const nextCatalog = normalizeCatalogRecord(payload?.data, catalogId);
+      if (nextCatalog) {
+        setCatalog(nextCatalog);
+      }
       setIsDirty(false);
       setSaveMessage('Catalogo actualizado');
       window.setTimeout(() => setSaveMessage(''), 2200);
@@ -428,10 +443,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
         return;
       }
 
-      setCatalog((current: any) => ({
-        ...current,
-        status: 'PUBLISHED',
-      }));
+      setCatalog((current) => (current ? { ...current, status: 'PUBLISHED' } : current));
       setSaveMessage('Catalogo publicado');
       window.setTimeout(() => setSaveMessage(''), 2200);
     } catch {
@@ -619,7 +631,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
                     <select
                       id="item-type"
                       value={selectedItem.type ?? 'TEXT'}
-                      onChange={(event) => updateSelectedItem('type', event.target.value)}
+                      onChange={(event) => updateSelectedItem('type', event.target.value as CatalogItemType)}
                       className="w-full rounded-lg border border-white/15 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-300/55 focus:ring-1 focus:ring-cyan-300/50"
                     >
                       <option value="TEXT">TEXT</option>
@@ -674,10 +686,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
                       value={catalog.title ?? ''}
                       onChange={(event) => {
                         setIsDirty(true);
-                        setCatalog((current: any) => ({
-                          ...current,
-                          title: event.target.value,
-                        }));
+                        setCatalog((current) => (current ? { ...current, title: event.target.value } : current));
                       }}
                       className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-cyan-300/55 focus:ring-1 focus:ring-cyan-300/50"
                       placeholder="Titulo del catalogo"
@@ -692,10 +701,7 @@ export default function CatalogVisualEditorPage(props: CatalogVisualEditorPagePr
                       value={catalog.description ?? ''}
                       onChange={(event) => {
                         setIsDirty(true);
-                        setCatalog((current: any) => ({
-                          ...current,
-                          description: event.target.value,
-                        }));
+                        setCatalog((current) => (current ? { ...current, description: event.target.value } : current));
                       }}
                       rows={4}
                       className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-cyan-300/55 focus:ring-1 focus:ring-cyan-300/50"

@@ -42,3 +42,5 @@ export const catalogQuerySchema = z.object({
 export type CreateCatalogInput = z.infer<typeof createCatalogSchema>;
 export type UpdateCatalogInput = z.infer<typeof updateCatalogSchema>;
 export type PublishCatalogInput = z.infer<typeof publishCatalogSchema>;
+export type CatalogItemInput = z.infer<typeof catalogItemInputSchema>;
+export type CatalogQueryInput = z.infer<typeof catalogQuerySchema>;

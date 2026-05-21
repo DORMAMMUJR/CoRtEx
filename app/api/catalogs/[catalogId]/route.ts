@@ -106,6 +106,44 @@ export async function PATCH(request: Request, context: CatalogRouteContext) {
   }
 }
 
+export async function GET(request: Request, context: CatalogRouteContext) {
+  const { catalogId } = await context.params;
+  const limiter = checkRateLimit('catalogs:by-id:get', { limit: 120, windowMs: 60_000 });
+  if (!limiter.allowed) {
+    return NextResponse.json({ error: 'RATE_LIMITED', resetAt: limiter.resetAt }, { status: 429 });
+  }
+
+  try {
+    const ownerId = await requireAuthenticatedUserId(request);
+    const ownership = await resolveOwnedCatalogOrError(catalogId, ownerId);
+    if ('error' in ownership) {
+      return ownership.error;
+    }
+
+    const record = await prisma.catalog.findUnique({
+      where: { id: catalogId },
+      include: {
+        items: {
+          orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+        },
+        publication: true,
+      },
+    });
+
+    if (!record) {
+      return NextResponse.json({ error: 'CATALOG_NOT_FOUND' }, { status: 404 });
+    }
+
+    return NextResponse.json({ data: record });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.code }, { status: 401 });
+    }
+
+    return NextResponse.json({ error: 'UNKNOWN_ERROR' }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: Request, context: CatalogRouteContext) {
   const { catalogId } = await context.params;
   const limiter = checkRateLimit('catalogs:delete', { limit: 40, windowMs: 60_000 });
