@@ -6,13 +6,9 @@ import {
   X,
   Menu,
   LayoutDashboard,
-  FolderKanban,
+  LibraryBig,
   BookOpen,
-  Rocket,
-  BarChart3,
-  CreditCard,
   Settings,
-  LogOut,
 } from 'lucide-react';
 
 type SidebarItem = {
@@ -29,11 +25,8 @@ type SidebarProps = {
 
 const defaultItems: SidebarItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Libreros', href: '/bookshelves', icon: FolderKanban },
   { label: 'Catalogos', href: '/catalogs', icon: BookOpen },
-  { label: 'Publicacion', href: '/publish', icon: Rocket },
-  { label: 'Analiticas', href: '/analytics', icon: BarChart3 },
-  { label: 'Suscripcion', href: '/subscription', icon: CreditCard },
+  { label: 'Estanterias', href: '/bookshelves', icon: LibraryBig },
   { label: 'Configuracion', href: '/settings', icon: Settings },
 ];
 
@@ -82,14 +75,8 @@ function SidebarContent({
         })}
       </nav>
 
-      <div className="mt-auto pt-4">
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/10 hover:text-white"
-        >
-          <LogOut className="h-4 w-4" />
-          <span>Salir</span>
-        </button>
+      <div className="mt-auto border-t border-white/10 pt-4 text-xs uppercase tracking-[0.18em] text-zinc-500">
+        CataMaker Workspace
       </div>
     </div>
   );
