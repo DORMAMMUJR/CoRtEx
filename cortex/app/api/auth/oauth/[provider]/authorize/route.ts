@@ -16,6 +16,10 @@ function resolveCanonicalBaseUrl(request: Request) {
   return `${requestUrl.protocol}//${requestUrl.host}`;
 }
 
+function shouldUseSecureCookies(baseUrl: string) {
+  return new URL(baseUrl).protocol === 'https:';
+}
+
 export async function GET(request: Request, context: RouteContext) {
   const { provider } = await context.params;
   const parsedProvider = oauthProviderSchema.safeParse(provider);
@@ -33,6 +37,7 @@ export async function GET(request: Request, context: RouteContext) {
   const callbackUrl = `${baseUrl}/api/auth/oauth/google/callback`;
   const state = createOAuthState();
   const stateCookieName = createOAuthStateCookieName('GOOGLE');
+  const secureCookies = shouldUseSecureCookies(baseUrl);
 
   const authorizeUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   authorizeUrl.searchParams.set('client_id', clientId);
@@ -45,7 +50,7 @@ export async function GET(request: Request, context: RouteContext) {
   const response = NextResponse.redirect(authorizeUrl.toString());
   response.cookies.set(stateCookieName, state, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: secureCookies,
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 10,

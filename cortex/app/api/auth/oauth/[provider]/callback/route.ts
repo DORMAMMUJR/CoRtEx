@@ -18,6 +18,10 @@ function resolveCanonicalBaseUrl(request: Request) {
   return `${requestUrl.protocol}//${requestUrl.host}`;
 }
 
+function shouldUseSecureCookies(baseUrl: string) {
+  return new URL(baseUrl).protocol === 'https:';
+}
+
 function getCookieValue(cookieHeader: string | null, cookieName: string) {
   if (!cookieHeader) {
     return null;
@@ -76,6 +80,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     const baseUrl = resolveCanonicalBaseUrl(request);
     const callbackUrl = `${baseUrl}/api/auth/oauth/google/callback`;
+    const secureCookies = shouldUseSecureCookies(baseUrl);
 
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -237,7 +242,7 @@ export async function GET(request: Request, context: RouteContext) {
     const response = NextResponse.redirect(new URL('/dashboard', baseUrl));
     response.cookies.set(sessionCookieName(), session.token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: secureCookies,
       sameSite: 'lax',
       path: '/',
       maxAge: session.maxAge,
@@ -246,7 +251,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     response.cookies.set(stateCookieName, '', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: secureCookies,
       sameSite: 'lax',
       path: '/',
       maxAge: 0,
